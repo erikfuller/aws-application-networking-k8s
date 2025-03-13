@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -58,15 +58,15 @@ func copy(src tgListOutput) tgListOutput {
 	srcSummary := src.tgSummary
 	cp := tgListOutput{
 		tgSummary: &vpclattice.TargetGroupSummary{
-			Arn:           aws.String(aws.StringValue(srcSummary.Arn)),
-			Id:            aws.String(aws.StringValue(srcSummary.Id)),
-			Name:          aws.String(aws.StringValue(srcSummary.Name)),
-			Type:          aws.String(aws.StringValue(srcSummary.Type)),
+			Arn:           aws.String(aws.ToString(srcSummary.Arn)),
+			Id:            aws.String(aws.ToString(srcSummary.Id)),
+			Name:          aws.String(aws.ToString(srcSummary.Name)),
+			Type:          aws.String(aws.ToString(srcSummary.Type)),
 			CreatedAt:     aws.Time(aws.TimeValue(srcSummary.CreatedAt)),
-			IpAddressType: aws.String(aws.StringValue(srcSummary.IpAddressType)),
+			IpAddressType: aws.String(aws.ToString(srcSummary.IpAddressType)),
 			Port:          aws.Int64(aws.Int64Value(srcSummary.Port)),
-			Protocol:      aws.String(aws.StringValue(srcSummary.Protocol)),
-			VpcIdentifier: aws.String(aws.StringValue(srcSummary.VpcIdentifier)),
+			Protocol:      aws.String(aws.ToString(srcSummary.Protocol)),
+			VpcIdentifier: aws.String(aws.ToString(srcSummary.VpcIdentifier)),
 		},
 	}
 
@@ -74,7 +74,7 @@ func copy(src tgListOutput) tgListOutput {
 	if srctags != nil {
 		cp.tags = make(map[string]*string)
 		for k, v := range srctags {
-			cp.tags[k] = aws.String(aws.StringValue(v))
+			cp.tags[k] = aws.String(aws.ToString(v))
 		}
 	}
 

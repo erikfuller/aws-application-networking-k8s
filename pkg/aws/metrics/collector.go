@@ -1,16 +1,12 @@
 package metrics
 
 import (
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/prometheus/client_golang/prometheus"
-	"strconv"
+	"context"
 	"time"
-)
 
-const (
-	sdkHandlerCollectAPICallMetric    = "collectAPICallMetric"
-	sdkHandlerCollectAPIRequestMetric = "collectAPIRequestMetric"
+	"github.com/aws/smithy-go/metrics"
+	"github.com/aws/smithy-go/middleware"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type collector struct {
@@ -27,84 +23,102 @@ func NewCollector(registerer prometheus.Registerer) (*collector, error) {
 	}, nil
 }
 
-func (c *collector) InjectHandlers(handlers *request.Handlers) {
-	handlers.CompleteAttempt.PushFrontNamed(request.NamedHandler{
-		Name: sdkHandlerCollectAPIRequestMetric,
-		Fn:   c.collectAPIRequestMetric,
-	})
-	handlers.Complete.PushFrontNamed(request.NamedHandler{
-		Name: sdkHandlerCollectAPICallMetric,
-		Fn:   c.collectAPICallMetric,
-	})
+// MetricsMiddleware returns a middleware that collects metrics for AWS SDK v2 operations
+func (c *collector) MetricsMiddleware() middleware.Stack {
+	return middleware.Stack{
+		Deserialize: middleware.DeserializeMiddleware{
+			Name: "MetricsCollector",
+			Next: middleware.DeserializeHandlerFunc(
+				func(ctx context.Context, in middleware.DeserializeInput) (
+					out middleware.DeserializeOutput, metadata middleware.Metadata, err error) {
+					start := time.Now()
+					out, metadata, err = in.Handler.Handle(ctx, in)
+
+					// Get operation info from context
+					operation := middleware.GetOperationName(ctx)
+					service := middleware.GetServiceID(ctx)
+
+					// Record metrics for the API call
+					c.recordAPIMetrics(service, operation, err, time.Since(start))
+
+					return out, metadata, err
+				},
+			),
+		},
+	}
 }
 
-func (c *collector) collectAPIRequestMetric(r *request.Request) {
-	service := r.ClientInfo.ServiceID
-	operation := r.Operation.Name
-	statusCode := statusCodeForRequest(r)
-	errorCode := errorCodeForRequest(r)
-	duration := time.Since(r.AttemptTime)
+func (c *collector) recordAPIMetrics(service, operation string, err error, duration time.Duration) {
+	statusCode := "0"
+	errorCode := ""
 
-	c.instruments.apiRequestsTotal.With(map[string]string{
-		labelService:    service,
-		labelOperation:  operation,
-		labelStatusCode: statusCode,
-		labelErrorCode:  errorCode,
-	}).Inc()
-	c.instruments.apiRequestDurationSecond.With(map[string]string{
-		labelService:   service,
-		labelOperation: operation,
-	}).Observe(duration.Seconds())
-}
+	// Extract status code and error code
+	if err != nil {
+		if apiErr, ok := err.(interface {
+			ErrorCode() string
+		}); ok {
+			errorCode = apiErr.ErrorCode()
+		} else {
+			errorCode = "internal"
+		}
+	}
 
-func (c *collector) collectAPICallMetric(r *request.Request) {
-	service := r.ClientInfo.ServiceID
-	operation := r.Operation.Name
-	statusCode := statusCodeForRequest(r)
-	errorCode := errorCodeForRequest(r)
-	duration := time.Since(r.Time)
-
+	// Record total API calls
 	c.instruments.apiCallsTotal.With(map[string]string{
 		labelService:    service,
 		labelOperation:  operation,
 		labelStatusCode: statusCode,
 		labelErrorCode:  errorCode,
 	}).Inc()
+
+	// Record API call duration
 	c.instruments.apiCallDurationSeconds.With(map[string]string{
 		labelService:   service,
 		labelOperation: operation,
 	}).Observe(duration.Seconds())
-	c.instruments.apiCallRetries.With(map[string]string{
-		labelService:   service,
-		labelOperation: operation,
-	}).Observe(float64(r.RetryCount))
 }
 
-// statusCodeForRequest returns the http status code for request.
-// if there is no http response, returns "0".
-func statusCodeForRequest(r *request.Request) string {
-	if r.HTTPResponse != nil {
-		return strconv.Itoa(r.HTTPResponse.StatusCode)
-	}
-	return "0"
+// Implement metrics.Provider interface
+type metricsProvider struct {
+	collector *collector
 }
 
-// errorCodeForRequest returns the error code for request.
-// if no error happened, returns "".
-func errorCodeForRequest(r *request.Request) string {
-	if r.Error != nil {
-		if awserr, ok := r.Error.(awserr.Error); ok {
-			return awserr.Code()
-		}
-		return "internal"
-	}
-	return ""
+func NewMetricsProvider(collector *collector) metrics.Provider {
+	return &metricsProvider{collector: collector}
 }
 
-// operationForRequest returns the operation for request.
-func operationForRequest(r *request.Request) string {
-	if r.Operation != nil {
-		return r.Operation.Name
+func (p *metricsProvider) Metrics(ctx context.Context) (metrics.Metrics, error) {
+	// Create a new metrics recorder
+	recorder := &metricsRecorder{
+		collector: p.collector,
+		started:   time.Now(),
 	}
-	return "?"
+	return recorder, nil
 }
+
+// metricsRecorder implements metrics.Metrics interface
+type metricsRecorder struct {
+	collector *collector
+	started   time.Time
+}
+
+func (r *metricsRecorder) Close() error {
+	return nil
+}
+
+// Usage example:
+/*
+func configureSDKClient(cfg *aws.Config) {
+    collector, err := NewCollector(prometheus.DefaultRegisterer)
+    if err != nil {
+        // Handle error
+    }
+
+    // Add metrics middleware to the config
+    cfg.APIOptions = append(cfg.APIOptions,
+        func(stack *middleware.Stack) error {
+            return stack.Merge(collector.MetricsMiddleware())
+        },
+    )
+}
+*/

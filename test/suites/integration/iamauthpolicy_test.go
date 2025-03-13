@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 
 	anv1alpha1 "github.com/aws/aws-application-networking-k8s/pkg/apis/applicationnetworking/v1alpha1"
 	"github.com/aws/aws-application-networking-k8s/pkg/controllers"
@@ -86,14 +86,14 @@ var _ = Describe("IAM Auth Policy", Ordered, func() {
 		out, _ := lattice.GetAuthPolicy(&vpclattice.GetAuthPolicyInput{
 			ResourceIdentifier: &resId,
 		})
-		Expect(aws.StringValue(out.Policy)).To(Equal(policy))
+		Expect(aws.ToString(out.Policy)).To(Equal(policy))
 	}
 
 	testLatticeSnPolicy := func(snId, authType, jsonPolicy string) {
 		sn, _ := lattice.GetServiceNetwork(&vpclattice.GetServiceNetworkInput{
 			ServiceNetworkIdentifier: &snId,
 		})
-		Expect(aws.StringValue(sn.AuthType)).To(Equal(authType))
+		Expect(aws.ToString(sn.AuthType)).To(Equal(authType))
 		testLatticePolicy(snId, jsonPolicy)
 	}
 

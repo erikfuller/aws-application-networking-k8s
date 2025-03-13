@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	anv1alpha1 "github.com/aws/aws-application-networking-k8s/pkg/apis/applicationnetworking/v1alpha1"
@@ -136,9 +136,9 @@ func (t *TargetGroupSynthesizer) SynthesizeUnusedDelete(ctx context.Context) ([]
 
 	for i, tg := range tgsToDelete {
 		modelStatus := model.TargetGroupStatus{
-			Name: aws.StringValue(tg.tgSummary.Name),
-			Arn:  aws.StringValue(tg.tgSummary.Arn),
-			Id:   aws.StringValue(tg.tgSummary.Id),
+			Name: aws.ToString(tg.tgSummary.Name),
+			Arn:  aws.ToString(tg.tgSummary.Arn),
+			Id:   aws.ToString(tg.tgSummary.Id),
 		}
 		modelTg := model.TargetGroup{
 			Status:    &modelStatus,
@@ -244,9 +244,9 @@ func (t *TargetGroupSynthesizer) shouldDeleteSvcExportTg(
 	// the main identifiers are validated, just need to check the other essentials.
 	// protocolVersion is not in TG summary so we are bringing it from tags.
 	if int64(modelTg.Spec.Port) != aws.Int64Value(latticeTg.tgSummary.Port) ||
-		modelTg.Spec.Protocol != aws.StringValue(latticeTg.tgSummary.Protocol) ||
+		modelTg.Spec.Protocol != aws.ToString(latticeTg.tgSummary.Protocol) ||
 		modelTg.Spec.ProtocolVersion != tagFields.K8SProtocolVersion ||
-		modelTg.Spec.IpAddressType != aws.StringValue(latticeTg.tgSummary.IpAddressType) {
+		modelTg.Spec.IpAddressType != aws.ToString(latticeTg.tgSummary.IpAddressType) {
 
 		// one or more immutable fields differ from the source, so the TG is out of date
 		t.log.Infof(ctx, "Will delete TargetGroup %s (%s) - fields differ from source service/service export",
@@ -348,7 +348,7 @@ func (t *TargetGroupSynthesizer) hasTags(latticeTg tgListOutput) bool {
 }
 
 func (t *TargetGroupSynthesizer) vpcMatchesConfig(latticeTg tgListOutput) bool {
-	if aws.StringValue(latticeTg.tgSummary.VpcIdentifier) != config.VpcID {
+	if aws.ToString(latticeTg.tgSummary.VpcIdentifier) != config.VpcID {
 		t.log.Debugf(context.TODO(), "Ignoring target group %s (%s) because it is not configured for this VPC",
 			*latticeTg.tgSummary.Arn, *latticeTg.tgSummary.Name)
 		return false

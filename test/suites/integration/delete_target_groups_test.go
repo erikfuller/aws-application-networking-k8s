@@ -2,13 +2,13 @@ package integration
 
 import (
 	"github.com/aws/aws-application-networking-k8s/pkg/aws/services"
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"log"
 	"time"
 
 	"github.com/aws/aws-application-networking-k8s/pkg/model/core"
 	"github.com/aws/aws-application-networking-k8s/test/pkg/test"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -101,7 +101,7 @@ func verifyTargetGroupDeleted(targetGroup *vpclattice.TargetGroupSummary) {
 		}
 
 		// showing up as "deleting" is also fine
-		if aws.StringValue(tg.Status) == vpclattice.TargetGroupStatusDeleteInProgress {
+		if aws.ToString(tg.Status) == vpclattice.TargetGroupStatusDeleteInProgress {
 			return
 		}
 

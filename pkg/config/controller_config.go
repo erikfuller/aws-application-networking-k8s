@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -8,10 +9,11 @@ import (
 
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/ec2metadata"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
 const (
@@ -45,12 +47,15 @@ var ServiceNetworkOverrideMode = false
 var RouteMaxConcurrentReconciles = 1
 
 func ConfigInit() error {
-	sess, _ := session.NewSession()
-	metadata := NewEC2Metadata(sess)
-	return configInit(sess, metadata)
+	cfg, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		return fmt.Errorf("unable to load config, %s", err)
+	}
+	metadata := NewEC2Metadata(cfg)
+	return configInit(cfg, metadata)
 }
 
-func configInit(sess *session.Session, metadata EC2Metadata) error {
+func configInit(cfg aws.Config, metadata EC2Metadata) error {
 	var err error
 
 	DevMode = os.Getenv(DEV_MODE)
@@ -93,7 +98,7 @@ func configInit(sess *session.Session, metadata EC2Metadata) error {
 		DisableTaggingServiceAPI = true
 	}
 
-	ClusterName, err = getClusterName(sess)
+	ClusterName, err = getClusterName(cfg)
 	if err != nil {
 		return fmt.Errorf("cannot get cluster name: %s", err)
 	}
@@ -111,28 +116,34 @@ func configInit(sess *session.Session, metadata EC2Metadata) error {
 }
 
 // try to find cluster name, search in env then in ec2 instance tags
-func getClusterName(sess *session.Session) (string, error) {
+func getClusterName(cfg aws.Config) (string, error) {
 	cn := os.Getenv(CLUSTER_NAME)
 	if cn != "" {
 		return cn, nil
 	}
 	// fallback to ec2 instance tags
-	meta := ec2metadata.New(sess)
-	doc, err := meta.GetInstanceIdentityDocument()
+	meta := imds.NewFromConfig(cfg)
+	doc, err := meta.GetInstanceIdentityDocument(context.TODO(), nil)
 	if err != nil {
 		return "", err
 	}
 	instanceId := doc.InstanceID
-	region, err := meta.Region()
+	region, err := meta.GetRegion(context.TODO(), nil)
 	if err != nil {
 		return "", err
 	}
-	ec2Client := ec2.New(sess, &aws.Config{Region: aws.String(region)})
-	tagReq := &ec2.DescribeTagsInput{Filters: []*ec2.Filter{{
+	if region == nil {
+		return "", errors.New("region not returned from IMDS")
+	}
+	ec2Cfg := cfg.Copy()
+	ec2Cfg.Region = region.Region
+
+	ec2Client := ec2.NewFromConfig(ec2Cfg)
+	tagReq := &ec2.DescribeTagsInput{Filters: []ec2types.Filter{{
 		Name:   aws.String("resource-id"),
-		Values: []*string{aws.String(instanceId)},
+		Values: []string{instanceId},
 	}}}
-	tagRes, err := ec2Client.DescribeTags(tagReq)
+	tagRes, err := ec2Client.DescribeTags(context.TODO(), tagReq)
 	if err != nil {
 		return "", err
 	}

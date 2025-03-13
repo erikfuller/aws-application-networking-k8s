@@ -6,8 +6,8 @@ import (
 	mocks "github.com/aws/aws-application-networking-k8s/pkg/aws/services"
 	model "github.com/aws/aws-application-networking-k8s/pkg/model/lattice"
 	"github.com/aws/aws-application-networking-k8s/pkg/utils/gwlog"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -277,9 +277,9 @@ func Test_Create(t *testing.T) {
 
 		mockLattice.EXPECT().CreateRuleWithContext(ctx, gomock.Any()).DoAndReturn(
 			func(ctx context.Context, input *vpclattice.CreateRuleInput, i ...interface{}) (*vpclattice.CreateRuleOutput, error) {
-				assert.Equal(t, "POST", aws.StringValue(input.Match.HttpMatch.Method))
+				assert.Equal(t, "POST", aws.ToString(input.Match.HttpMatch.Method))
 				assert.Equal(t, 1, len(input.Action.Forward.TargetGroups))
-				assert.Equal(t, "tg-id", aws.StringValue(input.Action.Forward.TargetGroups[0].TargetGroupIdentifier))
+				assert.Equal(t, "tg-id", aws.ToString(input.Action.Forward.TargetGroups[0].TargetGroupIdentifier))
 
 				return &vpclattice.CreateRuleOutput{
 					Arn:  aws.String("arn"),

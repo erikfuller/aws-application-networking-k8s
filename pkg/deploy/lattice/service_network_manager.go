@@ -10,8 +10,8 @@ import (
 	"github.com/aws/aws-application-networking-k8s/pkg/aws/services"
 	"github.com/aws/aws-application-networking-k8s/pkg/utils/gwlog"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 
 	pkg_aws "github.com/aws/aws-application-networking-k8s/pkg/aws"
 	"github.com/aws/aws-application-networking-k8s/pkg/config"
@@ -76,7 +76,7 @@ func (m *defaultServiceNetworkManager) UpsertVpcAssociation(ctx context.Context,
 		if err != nil {
 			return "", err
 		}
-		switch status := aws.StringValue(resp.Status); status {
+		switch status := aws.ToString(resp.Status); status {
 		case vpclattice.ServiceNetworkVpcAssociationStatusActive:
 			return *resp.Arn, nil
 		default:
@@ -147,12 +147,12 @@ func (m *defaultServiceNetworkManager) getActiveVpcAssociation(ctx context.Conte
 
 	// There can be at most one response for this
 	snva := resp[0]
-	if aws.StringValue(snva.Status) == vpclattice.ServiceNetworkVpcAssociationStatusActive {
+	if aws.ToString(snva.Status) == vpclattice.ServiceNetworkVpcAssociationStatusActive {
 		return snva, nil
 	}
 	m.log.Debugf(ctx, "snva %s status: %s",
-		aws.StringValue(snva.Arn), aws.StringValue(snva.Status))
-	switch aws.StringValue(snva.Status) {
+		aws.ToString(snva.Arn), aws.ToString(snva.Status))
+	switch aws.ToString(snva.Status) {
 	case vpclattice.ServiceNetworkVpcAssociationStatusActive,
 		vpclattice.ServiceNetworkVpcAssociationStatusDeleteFailed,
 		vpclattice.ServiceNetworkVpcAssociationStatusUpdateFailed:
@@ -192,12 +192,12 @@ func (m *defaultServiceNetworkManager) CreateOrUpdate(ctx context.Context, servi
 			return model.ServiceNetworkStatus{}, err
 		}
 
-		serviceNetworkId = aws.StringValue(resp.Id)
-		serviceNetworkArn = aws.StringValue(resp.Arn)
+		serviceNetworkId = aws.ToString(resp.Id)
+		serviceNetworkArn = aws.ToString(resp.Arn)
 	} else {
 		m.log.Debugf(ctx, "ServiceNetwork %s exists, checking its VPC association", serviceNetwork.Spec.Name)
-		serviceNetworkId = aws.StringValue(foundSnSummary.SvcNetwork.Id)
-		serviceNetworkArn = aws.StringValue(foundSnSummary.SvcNetwork.Arn)
+		serviceNetworkId = aws.ToString(foundSnSummary.SvcNetwork.Id)
+		serviceNetworkArn = aws.ToString(foundSnSummary.SvcNetwork.Arn)
 
 		snva, err := m.getActiveVpcAssociation(ctx, serviceNetworkId)
 		if err != nil {
@@ -205,7 +205,7 @@ func (m *defaultServiceNetworkManager) CreateOrUpdate(ctx context.Context, servi
 		}
 		if snva != nil {
 			m.log.Debugf(ctx, "ServiceNetwork %s already has VPC association %s",
-				serviceNetwork.Spec.Name, aws.StringValue(snva.Arn))
+				serviceNetwork.Spec.Name, aws.ToString(snva.Arn))
 			return model.ServiceNetworkStatus{ServiceNetworkARN: serviceNetworkArn, ServiceNetworkID: serviceNetworkId}, nil
 		}
 	}
@@ -258,9 +258,9 @@ func (m *defaultServiceNetworkManager) updateServiceNetworkVpcAssociation(ctx co
 }
 
 func securityGroupIdsEqual(arr1, arr2 []*string) bool {
-	ids1 := utils.SliceMap(arr1, aws.StringValue)
+	ids1 := utils.SliceMap(arr1, aws.ToString)
 	slices.Sort(ids1)
-	ids2 := utils.SliceMap(arr2, aws.StringValue)
+	ids2 := utils.SliceMap(arr2, aws.ToString)
 	slices.Sort(ids2)
 	return slices.Equal(ids1, ids2)
 }

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
 	"github.com/golang/mock/gomock"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -516,13 +516,13 @@ func TestServiceNetworkMatch(t *testing.T) {
 			if tt.outErrType == nil {
 				assert.Equal(
 					t,
-					aws.StringValue(tt.outSn.Name),
-					aws.StringValue(sn.Name),
+					aws.ToString(tt.outSn.Name),
+					aws.ToString(sn.Name),
 				)
 				assert.Equal(
 					t,
-					aws.StringValue(tt.outSn.Id),
-					aws.StringValue(sn.Id),
+					aws.ToString(tt.outSn.Id),
+					aws.ToString(sn.Id),
 				)
 			}
 		})

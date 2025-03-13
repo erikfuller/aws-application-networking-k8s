@@ -7,8 +7,8 @@ import (
 	"github.com/aws/aws-application-networking-k8s/pkg/aws/services"
 	"github.com/aws/aws-application-networking-k8s/pkg/utils/gwlog"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 
 	pkg_aws "github.com/aws/aws-application-networking-k8s/pkg/aws"
 	model "github.com/aws/aws-application-networking-k8s/pkg/model/lattice"
@@ -52,11 +52,11 @@ func (m *defaultServiceManager) createServiceAndAssociate(ctx context.Context, s
 	createSvcReq := m.newCreateSvcReq(svc)
 	createSvcResp, err := m.cloud.Lattice().CreateServiceWithContext(ctx, createSvcReq)
 	if err != nil {
-		return ServiceInfo{}, fmt.Errorf("failed CreateService %s due to %s", aws.StringValue(createSvcReq.Name), err)
+		return ServiceInfo{}, fmt.Errorf("failed CreateService %s due to %s", aws.ToString(createSvcReq.Name), err)
 	}
 
 	m.log.Infof(ctx, "Success CreateService %s %s",
-		aws.StringValue(createSvcResp.Name), aws.StringValue(createSvcResp.Id))
+		aws.ToString(createSvcResp.Name), aws.ToString(createSvcResp.Id))
 
 	for _, snName := range svc.Spec.ServiceNetworkNames {
 		err = m.createAssociation(ctx, createSvcResp.Id, snName)
@@ -82,10 +82,10 @@ func (m *defaultServiceManager) createAssociation(ctx context.Context, svcId *st
 	assocResp, err := m.cloud.Lattice().CreateServiceNetworkServiceAssociationWithContext(ctx, assocReq)
 	if err != nil {
 		return fmt.Errorf("failed CreateServiceNetworkServiceAssociation %s %s due to %s",
-			aws.StringValue(assocReq.ServiceNetworkIdentifier), aws.StringValue(assocReq.ServiceIdentifier), err)
+			aws.ToString(assocReq.ServiceNetworkIdentifier), aws.ToString(assocReq.ServiceIdentifier), err)
 	}
 	m.log.Infof(ctx, "Success CreateServiceNetworkServiceAssociation %s %s",
-		aws.StringValue(assocReq.ServiceNetworkIdentifier), aws.StringValue(assocReq.ServiceIdentifier))
+		aws.ToString(assocReq.ServiceNetworkIdentifier), aws.ToString(assocReq.ServiceIdentifier))
 
 	err = handleCreateAssociationResp(assocResp)
 	if err != nil {
@@ -116,10 +116,10 @@ func svcStatusFromCreateSvcResp(resp *CreateSvcResp) ServiceInfo {
 	if resp == nil {
 		return svcInfo
 	}
-	svcInfo.Arn = aws.StringValue(resp.Arn)
-	svcInfo.Id = aws.StringValue(resp.Id)
+	svcInfo.Arn = aws.ToString(resp.Arn)
+	svcInfo.Id = aws.ToString(resp.Id)
 	if resp.DnsEntry != nil {
-		svcInfo.Dns = aws.StringValue(resp.DnsEntry.DomainName)
+		svcInfo.Dns = aws.ToString(resp.DnsEntry.DomainName)
 	}
 	return svcInfo
 }
@@ -179,11 +179,11 @@ func (m *defaultServiceManager) updateServiceAndAssociations(ctx context.Context
 	}
 
 	svcInfo := ServiceInfo{
-		Arn: aws.StringValue(svcSum.Arn),
-		Id:  aws.StringValue(svcSum.Id),
+		Arn: aws.ToString(svcSum.Arn),
+		Id:  aws.ToString(svcSum.Id),
 	}
 	if svcSum.DnsEntry != nil {
-		svcInfo.Dns = aws.StringValue(svcSum.DnsEntry.DomainName)
+		svcInfo.Dns = aws.ToString(svcSum.DnsEntry.DomainName)
 	}
 	return svcInfo, nil
 }
@@ -246,10 +246,10 @@ func (m *defaultServiceManager) updateAssociations(ctx context.Context, svc *Ser
 
 // returns RetryErr on all non-active Sn-Svc association responses
 func handleCreateAssociationResp(resp *CreateSnSvcAssocResp) error {
-	status := aws.StringValue(resp.Status)
+	status := aws.ToString(resp.Status)
 	if status != vpclattice.ServiceNetworkServiceAssociationStatusActive {
 		return fmt.Errorf("%w: sn-service-association-id: %s, non-active status: %s",
-			RetryErr, aws.StringValue(resp.Id), status)
+			RetryErr, aws.ToString(resp.Id), status)
 	}
 	return nil
 }
@@ -279,7 +279,7 @@ func associationsDiff(svc *Service, curAssocs []*SnSvcAssocSummary) ([]string, [
 
 		// assoc should exists but in deletion state, will retry later to re-create
 		// TODO: we should have something more lightweight, retrying full reconciliation looks to heavy
-		if aws.StringValue(oldSn.Status) == vpclattice.ServiceNetworkServiceAssociationStatusDeleteInProgress {
+		if aws.ToString(oldSn.Status) == vpclattice.ServiceNetworkServiceAssociationStatusDeleteInProgress {
 			return nil, nil, fmt.Errorf("%w: want to associate sn: %s to svc: %s, but status is: %s",
 				RetryErr, newSn, svc.LatticeServiceName(), *oldSn.Status)
 		}
@@ -334,10 +334,10 @@ func (m *defaultServiceManager) deleteAssociation(ctx context.Context, assocArn 
 	_, err := m.cloud.Lattice().DeleteServiceNetworkServiceAssociationWithContext(ctx, delReq)
 	if err != nil {
 		return fmt.Errorf("failed DeleteServiceNetworkServiceAssociation %s due to %s",
-			aws.StringValue(assocArn), err)
+			aws.ToString(assocArn), err)
 	}
 
-	m.log.Infof(ctx, "Success DeleteServiceNetworkServiceAssociation %s", aws.StringValue(assocArn))
+	m.log.Infof(ctx, "Success DeleteServiceNetworkServiceAssociation %s", aws.ToString(assocArn))
 	return nil
 }
 
@@ -347,7 +347,7 @@ func (m *defaultServiceManager) deleteService(ctx context.Context, svc *SvcSumma
 	}
 	_, err := m.cloud.Lattice().DeleteServiceWithContext(ctx, &delInput)
 	if err != nil {
-		return fmt.Errorf("failed DeleteService %s due to %s", aws.StringValue(svc.Id), err)
+		return fmt.Errorf("failed DeleteService %s due to %s", aws.ToString(svc.Id), err)
 	}
 
 	m.log.Infof(ctx, "Success DeleteService %s", *svc.Id)

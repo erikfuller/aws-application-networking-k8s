@@ -3,12 +3,13 @@ package aws
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"go.uber.org/zap"
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 	"golang.org/x/exp/maps"
 
 	"github.com/aws/aws-application-networking-k8s/pkg/aws/metrics"
@@ -52,27 +53,15 @@ type Cloud interface {
 
 // NewCloud constructs new Cloud implementation.
 func NewCloud(log gwlog.Logger, cfg CloudConfig, metricsRegisterer prometheus.Registerer) (Cloud, error) {
-	sess, err := session.NewSession()
+	clientLogMode := aws.LogRequest | aws.LogResponse | aws.LogRetries
+	if log.InnerLogger.Level() <= zap.DebugLevel {
+		clientLogMode |= aws.LogRequestWithBody | aws.LogResponseWithBody
+	}
+
+	awsCfg, err := config.LoadDefaultConfig(context.Background(), config.WithClientLogMode(clientLogMode))
 	if err != nil {
 		return nil, err
 	}
-
-	sess.Handlers.Complete.PushFront(func(r *request.Request) {
-		if r.Error != nil {
-			log.Debugw(context.TODO(), "error",
-				"error", r.Error.Error(),
-				"serviceName", r.ClientInfo.ServiceName,
-				"operation", r.Operation.Name,
-				"params", r.Params,
-			)
-		} else {
-			log.Debugw(context.TODO(), "response",
-				"serviceName", r.ClientInfo.ServiceName,
-				"operation", r.Operation.Name,
-				"params", r.Params,
-			)
-		}
-	})
 
 	if metricsRegisterer != nil {
 		metricsCollector, err := metrics.NewCollector(metricsRegisterer)
@@ -82,13 +71,19 @@ func NewCloud(log gwlog.Logger, cfg CloudConfig, metricsRegisterer prometheus.Re
 		metricsCollector.InjectHandlers(&sess.Handlers)
 	}
 
-	lattice := services.NewDefaultLattice(sess, cfg.AccountId, cfg.Region)
+	lattice, err := services.NewDefaultLattice(awsCfg, cfg.AccountId, cfg.Region)
+	if err != nil {
+		return nil, err
+	}
 	var tagging services.Tagging
 
 	if cfg.TaggingServiceAPIDisabled {
-		tagging = services.NewLatticeTagging(sess, cfg.AccountId, cfg.Region, cfg.VpcId)
+		tagging, err = services.NewLatticeTagging(awsCfg, cfg.AccountId, cfg.Region, cfg.VpcId)
+		if err != nil {
+			return nil, err
+		}
 	} else {
-		tagging = services.NewDefaultTagging(sess, cfg.Region)
+		tagging = services.NewDefaultTagging(awsCfg, cfg.Region)
 	}
 
 	cl := NewDefaultCloudWithTagging(lattice, tagging, cfg)
@@ -134,7 +129,7 @@ func (c *defaultCloud) Config() CloudConfig {
 
 func (c *defaultCloud) DefaultTags() services.Tags {
 	tags := services.Tags{}
-	tags[TagManagedBy] = &c.managedByTag
+	tags[TagManagedBy] = c.managedByTag
 	return tags
 }
 
@@ -146,7 +141,7 @@ func (c *defaultCloud) DefaultTagsMergedWith(tags services.Tags) services.Tags {
 
 func (c *defaultCloud) getTags(ctx context.Context, arn string) (services.Tags, error) {
 	tagsReq := &vpclattice.ListTagsForResourceInput{ResourceArn: &arn}
-	resp, err := c.lattice.ListTagsForResourceWithContext(ctx, tagsReq)
+	resp, err := c.lattice.ListTagsForResource(ctx, tagsReq)
 	if err != nil {
 		return nil, err
 	}
@@ -155,10 +150,10 @@ func (c *defaultCloud) getTags(ctx context.Context, arn string) (services.Tags, 
 
 func (c *defaultCloud) getManagedByFromTags(tags services.Tags) string {
 	tag, ok := tags[TagManagedBy]
-	if !ok || tag == nil {
+	if !ok {
 		return ""
 	}
-	return *tag
+	return tag
 }
 
 func (c *defaultCloud) IsArnManaged(ctx context.Context, arn string) (bool, error) {
@@ -192,7 +187,7 @@ func (c *defaultCloud) TryOwnFromTags(ctx context.Context, arn string, tags serv
 }
 
 func (c *defaultCloud) ownResource(ctx context.Context, arn string) error {
-	_, err := c.Lattice().TagResourceWithContext(ctx, &vpclattice.TagResourceInput{
+	_, err := c.Lattice().TagResource(ctx, &vpclattice.TagResourceInput{
 		ResourceArn: &arn,
 		Tags:        c.DefaultTags(),
 	})

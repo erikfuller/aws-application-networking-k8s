@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -118,7 +118,7 @@ func (t *targetsSynthesizer) syncStatus(ctx context.Context, modelTargets []mode
 
 	for _, latticeTarget := range latticeTargets {
 		ipPort := model.Target{
-			TargetIP: aws.StringValue(latticeTarget.Id),
+			TargetIP: aws.ToString(latticeTarget.Id),
 			Port:     aws.Int64Value(latticeTarget.Port),
 		}
 		latticeTargetMap[ipPort] = latticeTarget
@@ -158,7 +158,7 @@ func (t *targetsSynthesizer) syncStatus(ctx context.Context, modelTargets []mode
 		// 1. Target for the pod (eventually) exists. If the target doesn't exist, we can simply requeue.
 		// 2. Target group will be always in use, except for ServiceExport TGs.
 		if latticeTarget, ok := latticeTargetMap[targetIpPort]; ok {
-			switch status := aws.StringValue(latticeTarget.Status); status {
+			switch status := aws.ToString(latticeTarget.Status); status {
 			case vpclattice.TargetStatusHealthy:
 				newCond.Status = corev1.ConditionTrue
 				newCond.Reason = ReadinessReasonHealthy

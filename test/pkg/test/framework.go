@@ -10,7 +10,7 @@ import (
 
 	anaws "github.com/aws/aws-application-networking-k8s/pkg/aws"
 
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/onsi/gomega/format"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -20,11 +20,11 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/external-dns/endpoint"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
@@ -128,7 +128,7 @@ func NewFramework(ctx context.Context, log gwlog.Logger, testNamespace string) *
 		Region:      config.Region,
 		ClusterName: config.ClusterName,
 	}
-	sess := session.Must(session.NewSession())
+	sess := session.Must(config.LoadDefaultConfig(context.Background()))
 	framework := &Framework{
 		Client:                  lo.Must(client.New(controllerRuntimeConfig, client.Options{Scheme: testScheme})),
 		LatticeClient:           services.NewDefaultLattice(sess, config.AccountID, config.Region),
@@ -391,7 +391,7 @@ func (env *Framework) FindTargetGroupFromSpec(ctx context.Context, tgSpec model.
 	}
 
 	for _, targetGroup := range targetGroups {
-		if aws.StringValue(targetGroup.Protocol) != tgSpec.Protocol {
+		if aws.ToString(targetGroup.Protocol) != tgSpec.Protocol {
 			continue
 		}
 
@@ -473,7 +473,7 @@ func (env *Framework) VerifyTargetGroupNotFound(tg *vpclattice.TargetGroupSummar
 		g.Expect(retrievedTargetGroup.Id).To(BeNil())
 		g.Expect(err).To(Not(BeNil()))
 		if err != nil {
-			if aerr, ok := err.(awserr.Error); ok {
+			if aerr, ok := err.(smithy.APIError); ok {
 				g.Expect(aerr.Code()).To(Equal(vpclattice.ErrCodeResourceNotFoundException))
 			}
 		}

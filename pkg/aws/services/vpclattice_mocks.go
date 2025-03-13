@@ -6,10 +6,11 @@ package services
 
 import (
 	context "context"
+	"github.com/aws/aws-sdk-go/aws/request"
 	reflect "reflect"
 
-	request "github.com/aws/aws-sdk-go/aws/request"
-	vpclattice "github.com/aws/aws-sdk-go/service/vpclattice"
+	vpclattice "github.com/aws/aws-sdk-go-v2/service/vpclattice"
+	vpcltypes "github.com/aws/aws-sdk-go-v2/service/vpclattice/types"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -1037,10 +1038,10 @@ func (mr *MockLatticeMockRecorder) DeregisterTargetsWithContext(arg0, arg1 inter
 }
 
 // FindService mocks base method.
-func (m *MockLattice) FindService(arg0 context.Context, arg1 string) (*vpclattice.ServiceSummary, error) {
+func (m *MockLattice) FindService(arg0 context.Context, arg1 string) (*vpcltypes.ServiceSummary, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindService", arg0, arg1)
-	ret0, _ := ret[0].(*vpclattice.ServiceSummary)
+	ret0, _ := ret[0].(*vpcltypes.ServiceSummary)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1680,10 +1681,10 @@ func (mr *MockLatticeMockRecorder) ListListeners(arg0 interface{}) *gomock.Call 
 }
 
 // ListListenersAsList mocks base method.
-func (m *MockLattice) ListListenersAsList(arg0 context.Context, arg1 *vpclattice.ListListenersInput) ([]*vpclattice.ListenerSummary, error) {
+func (m *MockLattice) ListListenersAsList(arg0 context.Context, arg1 *vpclattice.ListListenersInput) ([]vpcltypes.ListenerSummary, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListListenersAsList", arg0, arg1)
-	ret0, _ := ret[0].([]*vpclattice.ListenerSummary)
+	ret0, _ := ret[0].([]vpcltypes.ListenerSummary)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1778,10 +1779,10 @@ func (mr *MockLatticeMockRecorder) ListRules(arg0 interface{}) *gomock.Call {
 }
 
 // ListRulesAsList mocks base method.
-func (m *MockLattice) ListRulesAsList(arg0 context.Context, arg1 *vpclattice.ListRulesInput) ([]*vpclattice.RuleSummary, error) {
+func (m *MockLattice) ListRulesAsList(arg0 context.Context, arg1 *vpclattice.ListRulesInput) ([]vpcltypes.RuleSummary, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListRulesAsList", arg0, arg1)
-	ret0, _ := ret[0].([]*vpclattice.RuleSummary)
+	ret0, _ := ret[0].([]vpcltypes.RuleSummary)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1876,10 +1877,10 @@ func (mr *MockLatticeMockRecorder) ListServiceNetworkServiceAssociations(arg0 in
 }
 
 // ListServiceNetworkServiceAssociationsAsList mocks base method.
-func (m *MockLattice) ListServiceNetworkServiceAssociationsAsList(arg0 context.Context, arg1 *vpclattice.ListServiceNetworkServiceAssociationsInput) ([]*vpclattice.ServiceNetworkServiceAssociationSummary, error) {
+func (m *MockLattice) ListServiceNetworkServiceAssociationsAsList(arg0 context.Context, arg1 *vpclattice.ListServiceNetworkServiceAssociationsInput) ([]vpcltypes.ServiceNetworkServiceAssociationSummary, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListServiceNetworkServiceAssociationsAsList", arg0, arg1)
-	ret0, _ := ret[0].([]*vpclattice.ServiceNetworkServiceAssociationSummary)
+	ret0, _ := ret[0].([]vpcltypes.ServiceNetworkServiceAssociationSummary)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1974,10 +1975,10 @@ func (mr *MockLatticeMockRecorder) ListServiceNetworkVpcAssociations(arg0 interf
 }
 
 // ListServiceNetworkVpcAssociationsAsList mocks base method.
-func (m *MockLattice) ListServiceNetworkVpcAssociationsAsList(arg0 context.Context, arg1 *vpclattice.ListServiceNetworkVpcAssociationsInput) ([]*vpclattice.ServiceNetworkVpcAssociationSummary, error) {
+func (m *MockLattice) ListServiceNetworkVpcAssociationsAsList(arg0 context.Context, arg1 *vpclattice.ListServiceNetworkVpcAssociationsInput) ([]vpcltypes.ServiceNetworkVpcAssociationSummary, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListServiceNetworkVpcAssociationsAsList", arg0, arg1)
-	ret0, _ := ret[0].([]*vpclattice.ServiceNetworkVpcAssociationSummary)
+	ret0, _ := ret[0].([]vpcltypes.ServiceNetworkVpcAssociationSummary)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -2072,10 +2073,10 @@ func (mr *MockLatticeMockRecorder) ListServiceNetworks(arg0 interface{}) *gomock
 }
 
 // ListServiceNetworksAsList mocks base method.
-func (m *MockLattice) ListServiceNetworksAsList(arg0 context.Context, arg1 *vpclattice.ListServiceNetworksInput) ([]*vpclattice.ServiceNetworkSummary, error) {
+func (m *MockLattice) ListServiceNetworksAsList(arg0 context.Context, arg1 *vpclattice.ListServiceNetworksInput) ([]vpcltypes.ServiceNetworkSummary, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListServiceNetworksAsList", arg0, arg1)
-	ret0, _ := ret[0].([]*vpclattice.ServiceNetworkSummary)
+	ret0, _ := ret[0].([]vpcltypes.ServiceNetworkSummary)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -2170,10 +2171,10 @@ func (mr *MockLatticeMockRecorder) ListServices(arg0 interface{}) *gomock.Call {
 }
 
 // ListServicesAsList mocks base method.
-func (m *MockLattice) ListServicesAsList(arg0 context.Context, arg1 *vpclattice.ListServicesInput) ([]*vpclattice.ServiceSummary, error) {
+func (m *MockLattice) ListServicesAsList(arg0 context.Context, arg1 *vpclattice.ListServicesInput) ([]vpcltypes.ServiceSummary, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListServicesAsList", arg0, arg1)
-	ret0, _ := ret[0].([]*vpclattice.ServiceSummary)
+	ret0, _ := ret[0].([]vpcltypes.ServiceSummary)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -2318,10 +2319,10 @@ func (mr *MockLatticeMockRecorder) ListTargetGroups(arg0 interface{}) *gomock.Ca
 }
 
 // ListTargetGroupsAsList mocks base method.
-func (m *MockLattice) ListTargetGroupsAsList(arg0 context.Context, arg1 *vpclattice.ListTargetGroupsInput) ([]*vpclattice.TargetGroupSummary, error) {
+func (m *MockLattice) ListTargetGroupsAsList(arg0 context.Context, arg1 *vpclattice.ListTargetGroupsInput) ([]vpcltypes.TargetGroupSummary, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListTargetGroupsAsList", arg0, arg1)
-	ret0, _ := ret[0].([]*vpclattice.TargetGroupSummary)
+	ret0, _ := ret[0].([]vpcltypes.TargetGroupSummary)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -2416,10 +2417,10 @@ func (mr *MockLatticeMockRecorder) ListTargets(arg0 interface{}) *gomock.Call {
 }
 
 // ListTargetsAsList mocks base method.
-func (m *MockLattice) ListTargetsAsList(arg0 context.Context, arg1 *vpclattice.ListTargetsInput) ([]*vpclattice.TargetSummary, error) {
+func (m *MockLattice) ListTargetsAsList(arg0 context.Context, arg1 *vpclattice.ListTargetsInput) ([]vpcltypes.TargetSummary, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListTargetsAsList", arg0, arg1)
-	ret0, _ := ret[0].([]*vpclattice.TargetSummary)
+	ret0, _ := ret[0].([]vpcltypes.TargetSummary)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

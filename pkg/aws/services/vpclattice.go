@@ -8,15 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/arn"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
-	"github.com/aws/aws-sdk-go/service/vpclattice/vpclatticeiface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
+	vpclatticetypes "github.com/aws/aws-sdk-go-v2/service/vpclattice/types"
+	"github.com/aws/smithy-go"
 
 	"github.com/aws/aws-application-networking-k8s/pkg/config"
 	"github.com/aws/aws-application-networking-k8s/pkg/utils"
@@ -30,8 +28,13 @@ var (
 	ErrInternal     = errors.New("internal error")
 )
 
+const (
+	ErrCodeResourceNotFoundException = "ResourceNotFoundException"
+	ErrCodeAccessDeniedException     = "AccessDeniedException"
+)
+
 type ServiceNetworkInfo struct {
-	SvcNetwork vpclattice.ServiceNetworkSummary
+	SvcNetwork vpclatticetypes.ServiceNetworkSummary
 	Tags       Tags
 }
 
@@ -40,8 +43,8 @@ func NewNotFoundError(resourceType string, name string) error {
 }
 
 func IsNotFoundError(err error) bool {
-	if aerr, ok := err.(awserr.Error); ok {
-		if aerr.Code() == vpclattice.ErrCodeResourceNotFoundException {
+	if aerr, ok := err.(smithy.APIError); ok {
+		if aerr.ErrorCode() == ErrCodeResourceNotFoundException {
 			return true
 		}
 	}
@@ -92,27 +95,35 @@ func IsInvalidError(err error) bool {
 }
 
 type Lattice interface {
-	vpclatticeiface.VPCLatticeAPI
-	ListListenersAsList(ctx context.Context, input *vpclattice.ListListenersInput) ([]*vpclattice.ListenerSummary, error)
-	GetRulesAsList(ctx context.Context, input *vpclattice.ListRulesInput) ([]*vpclattice.GetRuleOutput, error)
-	ListRulesAsList(ctx context.Context, input *vpclattice.ListRulesInput) ([]*vpclattice.RuleSummary, error)
-	ListServiceNetworksAsList(ctx context.Context, input *vpclattice.ListServiceNetworksInput) ([]*vpclattice.ServiceNetworkSummary, error)
-	ListServicesAsList(ctx context.Context, input *vpclattice.ListServicesInput) ([]*vpclattice.ServiceSummary, error)
-	ListTargetGroupsAsList(ctx context.Context, input *vpclattice.ListTargetGroupsInput) ([]*vpclattice.TargetGroupSummary, error)
-	ListTargetsAsList(ctx context.Context, input *vpclattice.ListTargetsInput) ([]*vpclattice.TargetSummary, error)
-	ListServiceNetworkVpcAssociationsAsList(ctx context.Context, input *vpclattice.ListServiceNetworkVpcAssociationsInput) ([]*vpclattice.ServiceNetworkVpcAssociationSummary, error)
-	ListServiceNetworkServiceAssociationsAsList(ctx context.Context, input *vpclattice.ListServiceNetworkServiceAssociationsInput) ([]*vpclattice.ServiceNetworkServiceAssociationSummary, error)
+	Client() *vpclattice.Client
+	ListListenersAsList(ctx context.Context, input *vpclattice.ListListenersInput) ([]vpclatticetypes.ListenerSummary, error)
+	GetRulesAsList(ctx context.Context, input *vpclattice.ListRulesInput) ([]vpclattice.GetRuleOutput, error)
+	ListRulesAsList(ctx context.Context, input *vpclattice.ListRulesInput) ([]vpclatticetypes.RuleSummary, error)
+	ListServiceNetworksAsList(ctx context.Context, input *vpclattice.ListServiceNetworksInput) ([]vpclatticetypes.ServiceNetworkSummary, error)
+	ListServicesAsList(ctx context.Context, input *vpclattice.ListServicesInput) ([]vpclatticetypes.ServiceSummary, error)
+	// ListTagsForResource cached version, use instead of calling directly against Client()
+	ListTagsForResource(ctx context.Context, input *vpclattice.ListTagsForResourceInput) (*vpclattice.ListTagsForResourceOutput, error)
+	ListTargetGroupsAsList(ctx context.Context, input *vpclattice.ListTargetGroupsInput) ([]vpclatticetypes.TargetGroupSummary, error)
+	ListTargetsAsList(ctx context.Context, input *vpclattice.ListTargetsInput) ([]vpclatticetypes.TargetSummary, error)
+	ListServiceNetworkVpcAssociationsAsList(ctx context.Context, input *vpclattice.ListServiceNetworkVpcAssociationsInput) ([]vpclatticetypes.ServiceNetworkVpcAssociationSummary, error)
+	ListServiceNetworkServiceAssociationsAsList(ctx context.Context, input *vpclattice.ListServiceNetworkServiceAssociationsInput) ([]vpclatticetypes.ServiceNetworkServiceAssociationSummary, error)
 	FindServiceNetwork(ctx context.Context, nameOrId string) (*ServiceNetworkInfo, error)
-	FindService(ctx context.Context, latticeServiceName string) (*vpclattice.ServiceSummary, error)
+	FindService(ctx context.Context, latticeServiceName string) (*vpclatticetypes.ServiceSummary, error)
+	// TagResource cached version, use instead of calling directly against Client()
+	TagResource(ctx context.Context, input *vpclattice.TagResourceInput) (*vpclattice.TagResourceOutput, error)
 }
 
 type defaultLattice struct {
-	vpclatticeiface.VPCLatticeAPI
+	client     *vpclattice.Client
 	ownAccount string
 	cache      *expirable.LRU[string, any]
 }
 
-func NewDefaultLattice(sess *session.Session, acc string, region string) *defaultLattice {
+func (d *defaultLattice) Client() *vpclattice.Client {
+	return d.client
+}
+
+func NewDefaultLattice(baseCfg aws.Config, acc string, region string) (*defaultLattice, error) {
 
 	latticeEndpoint := "https://vpc-lattice." + region + ".amazonaws.com"
 	endpoint := os.Getenv("LATTICE_ENDPOINT")
@@ -121,38 +132,50 @@ func NewDefaultLattice(sess *session.Session, acc string, region string) *defaul
 		endpoint = latticeEndpoint
 	}
 
-	latticeSess := vpclattice.New(sess, aws.NewConfig().WithRegion(region).WithEndpoint(endpoint).WithMaxRetries(20))
+	cfg := baseCfg.Copy()
+	cfg.Region = region
+	cfg.BaseEndpoint = &endpoint
+	cfg.RetryMaxAttempts = 2
 
+	client := vpclattice.NewFromConfig(cfg, func(o *vpclattice.Options) {
+		o.TracerProvider = nil
+		o.MeterProvider = nil
+	})
 	cache := expirable.NewLRU[string, any](1000, nil, time.Second*60)
 
 	return &defaultLattice{
-		VPCLatticeAPI: latticeSess,
-		ownAccount:    acc,
-		cache:         cache,
-	}
+		client:     client,
+		ownAccount: acc,
+		cache:      cache,
+	}, nil
 }
 
-func (d *defaultLattice) ListListenersAsList(ctx context.Context, input *vpclattice.ListListenersInput) ([]*vpclattice.ListenerSummary, error) {
-	var result []*vpclattice.ListenerSummary
+func (d *defaultLattice) ListListenersAsList(ctx context.Context, input *vpclattice.ListListenersInput) ([]vpclatticetypes.ListenerSummary, error) {
+	var result []vpclatticetypes.ListenerSummary
 
-	err := d.ListListenersPagesWithContext(ctx, input, func(page *vpclattice.ListListenersOutput, lastPage bool) bool {
-		result = append(result, page.Items...)
-		return true
-	})
-
-	if err != nil {
-		return nil, err
+	paginator := vpclattice.NewListListenersPaginator(d.Client(), input)
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, output.Items...)
 	}
 
 	return result, nil
 }
 
-func (d *defaultLattice) GetRulesAsList(ctx context.Context, input *vpclattice.ListRulesInput) ([]*vpclattice.GetRuleOutput, error) {
-	var result []*vpclattice.GetRuleOutput
+func (d *defaultLattice) GetRulesAsList(ctx context.Context, input *vpclattice.ListRulesInput) ([]vpclattice.GetRuleOutput, error) {
+	var result []vpclattice.GetRuleOutput
 
+	paginator := vpclattice.NewListRulesPaginator(d.Client(), input)
 	var innerErr error
-	err := d.ListRulesPagesWithContext(ctx, input, func(page *vpclattice.ListRulesOutput, lastPage bool) bool {
-		for _, r := range page.Items {
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range output.Items {
 			grInput := vpclattice.GetRuleInput{
 				ServiceIdentifier:  input.ServiceIdentifier,
 				ListenerIdentifier: input.ListenerIdentifier,
@@ -160,87 +183,80 @@ func (d *defaultLattice) GetRulesAsList(ctx context.Context, input *vpclattice.L
 			}
 
 			var gro *vpclattice.GetRuleOutput
-			gro, innerErr = d.GetRuleWithContext(ctx, &grInput)
+			gro, innerErr = d.Client().GetRule(ctx, &grInput)
 			if innerErr != nil {
-				return false
+				return nil, innerErr
 			}
-			result = append(result, gro)
+			result = append(result, *gro)
 		}
-		return true
-	})
+	}
 
 	if innerErr != nil {
 		return nil, innerErr
 	}
 
-	if err != nil {
-		return nil, err
+	return result, nil
+}
+
+func (d *defaultLattice) ListRulesAsList(ctx context.Context, input *vpclattice.ListRulesInput) ([]vpclatticetypes.RuleSummary, error) {
+	var result []vpclatticetypes.RuleSummary
+
+	paginator := vpclattice.NewListRulesPaginator(d.Client(), input)
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, output.Items...)
 	}
 
 	return result, nil
 }
 
-func (d *defaultLattice) ListRulesAsList(ctx context.Context, input *vpclattice.ListRulesInput) ([]*vpclattice.RuleSummary, error) {
-	var result []*vpclattice.RuleSummary
+func (d *defaultLattice) ListServiceNetworksAsList(ctx context.Context, input *vpclattice.ListServiceNetworksInput) ([]vpclatticetypes.ServiceNetworkSummary, error) {
+	var result []vpclatticetypes.ServiceNetworkSummary
 
-	err := d.ListRulesPagesWithContext(ctx, input, func(page *vpclattice.ListRulesOutput, lastPage bool) bool {
-		result = append(result, page.Items...)
-		return true
-	})
-
-	if err != nil {
-		return nil, err
+	paginator := vpclattice.NewListServiceNetworksPaginator(d.Client(), input)
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, output.Items...)
 	}
 
 	return result, nil
 }
 
-func (d *defaultLattice) ListServiceNetworksAsList(ctx context.Context, input *vpclattice.ListServiceNetworksInput) ([]*vpclattice.ServiceNetworkSummary, error) {
-	result := []*vpclattice.ServiceNetworkSummary{}
-
-	err := d.ListServiceNetworksPagesWithContext(ctx, input, func(page *vpclattice.ListServiceNetworksOutput, lastPage bool) bool {
-		result = append(result, page.Items...)
-		return true
-	})
-
-	if err != nil {
-		return nil, err
+func (d *defaultLattice) ListServicesAsList(ctx context.Context, input *vpclattice.ListServicesInput) ([]vpclatticetypes.ServiceSummary, error) {
+	var result []vpclatticetypes.ServiceSummary
+	paginator := vpclattice.NewListServicesPaginator(d.Client(), input)
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, output.Items...)
 	}
 
 	return result, nil
 }
 
-func (d *defaultLattice) ListServicesAsList(ctx context.Context, input *vpclattice.ListServicesInput) ([]*vpclattice.ServiceSummary, error) {
-	result := []*vpclattice.ServiceSummary{}
-
-	err := d.ListServicesPagesWithContext(ctx, input, func(page *vpclattice.ListServicesOutput, lastPage bool) bool {
-		result = append(result, page.Items...)
-		return true
-	})
-
-	if err != nil {
-		return nil, err
+func (d *defaultLattice) ListTargetGroupsAsList(ctx context.Context, input *vpclattice.ListTargetGroupsInput) ([]vpclatticetypes.TargetGroupSummary, error) {
+	var result []vpclatticetypes.TargetGroupSummary
+	paginator := vpclattice.NewListTargetGroupsPaginator(d.Client(), input)
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, output.Items...)
 	}
 
 	return result, nil
 }
 
-func (d *defaultLattice) ListTargetGroupsAsList(ctx context.Context, input *vpclattice.ListTargetGroupsInput) ([]*vpclattice.TargetGroupSummary, error) {
-	result := []*vpclattice.TargetGroupSummary{}
-
-	err := d.ListTargetGroupsPagesWithContext(ctx, input, func(page *vpclattice.ListTargetGroupsOutput, lastPage bool) bool {
-		result = append(result, page.Items...)
-		return true
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-func (d *defaultLattice) ListTagsForResourceWithContext(ctx context.Context, input *vpclattice.ListTagsForResourceInput, option ...request.Option) (*vpclattice.ListTagsForResourceOutput, error) {
+func (d *defaultLattice) ListTagsForResource(ctx context.Context, input *vpclattice.ListTagsForResourceInput) (*vpclattice.ListTagsForResourceOutput, error) {
 	key := tagCacheKey(*input.ResourceArn)
 	if d.cache != nil {
 		r, ok := d.cache.Get(key)
@@ -248,7 +264,8 @@ func (d *defaultLattice) ListTagsForResourceWithContext(ctx context.Context, inp
 			return r.(*vpclattice.ListTagsForResourceOutput), nil
 		}
 	}
-	out, err := d.VPCLatticeAPI.ListTagsForResourceWithContext(ctx, input, option...)
+
+	out, err := d.Client().ListTagsForResource(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -262,63 +279,60 @@ func tagCacheKey(arn string) string {
 	return "tag-" + arn
 }
 
-func (d *defaultLattice) TagResourceWithContext(ctx context.Context, input *vpclattice.TagResourceInput, option ...request.Option) (*vpclattice.TagResourceOutput, error) {
+func (d *defaultLattice) TagResource(ctx context.Context, input *vpclattice.TagResourceInput) (*vpclattice.TagResourceOutput, error) {
 	if d.cache != nil {
 		key := tagCacheKey(*input.ResourceArn)
 		d.cache.Remove(key)
 	}
-	return d.VPCLatticeAPI.TagResourceWithContext(ctx, input, option...)
+	return d.Client().TagResource(ctx, input)
 }
 
-func (d *defaultLattice) ListTargetsAsList(ctx context.Context, input *vpclattice.ListTargetsInput) ([]*vpclattice.TargetSummary, error) {
-	result := []*vpclattice.TargetSummary{}
-
-	err := d.ListTargetsPagesWithContext(ctx, input, func(page *vpclattice.ListTargetsOutput, lastPage bool) bool {
-		result = append(result, page.Items...)
-		return true
-	})
-
-	if err != nil {
-		return nil, err
+func (d *defaultLattice) ListTargetsAsList(ctx context.Context, input *vpclattice.ListTargetsInput) ([]vpclatticetypes.TargetSummary, error) {
+	var result []vpclatticetypes.TargetSummary
+	paginator := vpclattice.NewListTargetsPaginator(d.Client(), input)
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, output.Items...)
 	}
 
 	return result, nil
 }
 
-func (d *defaultLattice) ListServiceNetworkVpcAssociationsAsList(ctx context.Context, input *vpclattice.ListServiceNetworkVpcAssociationsInput) ([]*vpclattice.ServiceNetworkVpcAssociationSummary, error) {
-	result := []*vpclattice.ServiceNetworkVpcAssociationSummary{}
-
-	err := d.ListServiceNetworkVpcAssociationsPagesWithContext(ctx, input, func(page *vpclattice.ListServiceNetworkVpcAssociationsOutput, lastPage bool) bool {
-		result = append(result, page.Items...)
-		return true
-	})
-
-	if err != nil {
-		return nil, err
+func (d *defaultLattice) ListServiceNetworkVpcAssociationsAsList(ctx context.Context, input *vpclattice.ListServiceNetworkVpcAssociationsInput) ([]vpclatticetypes.ServiceNetworkVpcAssociationSummary, error) {
+	var result []vpclatticetypes.ServiceNetworkVpcAssociationSummary
+	paginator := vpclattice.NewListServiceNetworkVpcAssociationsPaginator(d.Client(), input)
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, output.Items...)
 	}
 
 	return result, nil
 }
 
-func (d *defaultLattice) ListServiceNetworkServiceAssociationsAsList(ctx context.Context, input *vpclattice.ListServiceNetworkServiceAssociationsInput) ([]*vpclattice.ServiceNetworkServiceAssociationSummary, error) {
-	result := []*vpclattice.ServiceNetworkServiceAssociationSummary{}
-
-	err := d.ListServiceNetworkServiceAssociationsPagesWithContext(ctx, input, func(page *vpclattice.ListServiceNetworkServiceAssociationsOutput, lastPage bool) bool {
-		result = append(result, page.Items...)
-		return true
-	})
-
-	if err != nil {
-		return nil, err
+func (d *defaultLattice) ListServiceNetworkServiceAssociationsAsList(ctx context.Context, input *vpclattice.ListServiceNetworkServiceAssociationsInput) ([]vpclatticetypes.ServiceNetworkServiceAssociationSummary, error) {
+	var result []vpclatticetypes.ServiceNetworkServiceAssociationSummary
+	paginator := vpclattice.NewListServiceNetworkServiceAssociationsPaginator(d.Client(), input)
+	for paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, output.Items...)
 	}
 
 	return result, nil
 }
 
-func (d *defaultLattice) snSummaryToLog(snSum []*vpclattice.ServiceNetworkSummary) string {
+func (d *defaultLattice) snSummaryToLog(snSum []vpclatticetypes.ServiceNetworkSummary) string {
 	out := make([]string, len(snSum))
 	for i, s := range snSum {
-		out[i] = fmt.Sprintf("{name=%s, id=%s}", aws.StringValue(s.Name), aws.StringValue(s.Id))
+		out[i] = fmt.Sprintf("{name=%s, id=%s}", aws.ToString(s.Name), aws.ToString(s.Id))
 	}
 	return strings.Join(out, ",")
 }
@@ -326,13 +340,13 @@ func (d *defaultLattice) snSummaryToLog(snSum []*vpclattice.ServiceNetworkSummar
 // Try find by name first, if there is no single match, continue with id match. Ideally name match
 // should work just fine, but in desperate scenario of shared SN when naming collision happens using
 // id can be an option
-func (d *defaultLattice) serviceNetworkMatch(allSn []*vpclattice.ServiceNetworkSummary, nameOrId string) (*vpclattice.ServiceNetworkSummary, error) {
-	var snMatch *vpclattice.ServiceNetworkSummary
-	nameMatch := utils.SliceFilter(allSn, func(snSum *vpclattice.ServiceNetworkSummary) bool {
-		return aws.StringValue(snSum.Name) == nameOrId
+func (d *defaultLattice) serviceNetworkMatch(allSn []vpclatticetypes.ServiceNetworkSummary, nameOrId string) (*vpclatticetypes.ServiceNetworkSummary, error) {
+	var snMatch *vpclatticetypes.ServiceNetworkSummary
+	nameMatch := utils.SliceFilter(allSn, func(snSum vpclatticetypes.ServiceNetworkSummary) bool {
+		return aws.ToString(snSum.Name) == nameOrId
 	})
-	idMatch := utils.SliceFilter(allSn, func(snSum *vpclattice.ServiceNetworkSummary) bool {
-		return aws.StringValue(snSum.Id) == nameOrId
+	idMatch := utils.SliceFilter(allSn, func(snSum vpclatticetypes.ServiceNetworkSummary) bool {
+		return aws.ToString(snSum.Id) == nameOrId
 	})
 
 	switch {
@@ -342,9 +356,9 @@ func (d *defaultLattice) serviceNetworkMatch(allSn []*vpclattice.ServiceNetworkS
 		return nil, fmt.Errorf("%w, multiple SN found: nameMatch=%s idMatch=%s",
 			ErrNameConflict, d.snSummaryToLog(nameMatch), d.snSummaryToLog(idMatch))
 	case len(nameMatch) == 1:
-		snMatch = nameMatch[0]
+		snMatch = &nameMatch[0]
 	case len(idMatch) == 1:
-		snMatch = idMatch[0]
+		snMatch = &idMatch[0]
 	default:
 		return nil, fmt.Errorf("%w: service network match: unreachable", ErrInternal)
 	}
@@ -379,18 +393,18 @@ func (d *defaultLattice) FindServiceNetwork(ctx context.Context, nameOrId string
 
 	// try to fetch tags only if SN in the same aws account with controller's config
 	tags := Tags{}
-	isLocal, err := d.isLocalResource(aws.StringValue(snMatch.Arn))
+	isLocal, err := d.isLocalResource(aws.ToString(snMatch.Arn))
 	if err != nil {
 		return nil, err
 	}
 	if isLocal {
 		tagsInput := vpclattice.ListTagsForResourceInput{ResourceArn: snMatch.Arn}
-		tagsOutput, err := d.ListTagsForResourceWithContext(ctx, &tagsInput)
+		tagsOutput, err := d.ListTagsForResource(ctx, &tagsInput)
 		if err != nil {
-			aerr, ok := err.(awserr.Error)
+			aerr, ok := err.(smithy.APIError)
 			// In case ownAccount is not set, we cant tell if SN is foreign.
 			// In this case access denied is expected.
-			if !ok || aerr.Code() != vpclattice.ErrCodeAccessDeniedException {
+			if !ok || aerr.ErrorCode() != ErrCodeAccessDeniedException {
 				return nil, err
 			}
 		} else {
@@ -405,23 +419,24 @@ func (d *defaultLattice) FindServiceNetwork(ctx context.Context, nameOrId string
 }
 
 // see utils.LatticeServiceName
-func (d *defaultLattice) FindService(ctx context.Context, latticeServiceName string) (*vpclattice.ServiceSummary, error) {
+func (d *defaultLattice) FindService(ctx context.Context, latticeServiceName string) (*vpclatticetypes.ServiceSummary, error) {
 	input := vpclattice.ListServicesInput{}
 
-	var svcMatch *vpclattice.ServiceSummary
-	err := d.ListServicesPagesWithContext(ctx, &input, func(page *vpclattice.ListServicesOutput, lastPage bool) bool {
-		for _, svc := range page.Items {
+	var svcMatch *vpclatticetypes.ServiceSummary
+	paginator := vpclattice.NewListServicesPaginator(d.Client(), &input)
+	for (svcMatch == nil) && paginator.HasMorePages() {
+		output, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, svc := range output.Items {
 			if *svc.Name == latticeServiceName {
-				svcMatch = svc
-				return false
+				svcMatch = &svc
+				break
 			}
 		}
-		return true
-	})
-
-	if err != nil {
-		return nil, err
 	}
+
 	if svcMatch == nil {
 		return nil, NewNotFoundError("Service", latticeServiceName)
 	}
@@ -434,9 +449,9 @@ func IsLatticeAPINotFoundErr(err error) bool {
 		return false
 	}
 
-	var aErr awserr.Error
+	var aErr smithy.APIError
 	if errors.As(err, &aErr) {
-		return aErr.Code() == vpclattice.ErrCodeResourceNotFoundException
+		return aErr.ErrorCode() == ErrCodeResourceNotFoundException
 	}
 	return false
 }

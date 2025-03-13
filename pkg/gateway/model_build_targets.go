@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-application-networking-k8s/pkg/model/core"
 	model "github.com/aws/aws-application-networking-k8s/pkg/model/lattice"
 	"github.com/aws/aws-application-networking-k8s/pkg/utils/gwlog"
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	discoveryv1 "k8s.io/api/discovery/v1"
 )
 
@@ -183,7 +183,7 @@ func (t *latticeTargetsModelBuildTask) getTargetListFromEndpoints(ctx context.Co
 		for _, port := range epSlice.Ports {
 			// Note that the Endpoint's port name is from ServicePort, but the actual registered port
 			// is from Pods(targets).
-			if _, ok := servicePortNames[aws.StringValue(port.Name)]; ok || skipMatch {
+			if _, ok := servicePortNames[aws.ToString(port.Name)]; ok || skipMatch {
 				for _, ep := range epSlice.Endpoints {
 					for _, address := range ep.Addresses {
 						// Do not model terminating endpoints so that they can deregister.

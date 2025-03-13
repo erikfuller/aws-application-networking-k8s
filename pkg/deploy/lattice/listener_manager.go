@@ -11,8 +11,8 @@ import (
 
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 
 	"github.com/aws/aws-application-networking-k8s/pkg/utils"
 
@@ -71,9 +71,9 @@ func (d *defaultListenerManager) Upsert(
 	}
 
 	existingListenerStatus := model.ListenerStatus{
-		Name:        aws.StringValue(latticeListenerSummary.Name),
-		ListenerArn: aws.StringValue(latticeListenerSummary.Arn),
-		Id:          aws.StringValue(latticeListenerSummary.Id),
+		Name:        aws.ToString(latticeListenerSummary.Name),
+		ListenerArn: aws.ToString(latticeListenerSummary.Arn),
+		Id:          aws.ToString(latticeListenerSummary.Id),
 		ServiceId:   latticeSvcId,
 	}
 	if modelListener.Spec.Protocol != vpclattice.ListenerProtocolTlsPassthrough {
@@ -109,30 +109,30 @@ func (d *defaultListenerManager) create(ctx context.Context, latticeSvcId string
 	resp, err := d.cloud.Lattice().CreateListenerWithContext(ctx, &listenerInput)
 	if err != nil {
 		return model.ListenerStatus{},
-			fmt.Errorf("Failed CreateListener %s due to %s", aws.StringValue(listenerInput.Name), err)
+			fmt.Errorf("Failed CreateListener %s due to %s", aws.ToString(listenerInput.Name), err)
 	}
-	d.log.Infof(ctx, "Success CreateListener %s, %s", aws.StringValue(resp.Name), aws.StringValue(resp.Id))
+	d.log.Infof(ctx, "Success CreateListener %s, %s", aws.ToString(resp.Name), aws.ToString(resp.Id))
 
 	return model.ListenerStatus{
-		Name:        aws.StringValue(resp.Name),
-		ListenerArn: aws.StringValue(resp.Arn),
-		Id:          aws.StringValue(resp.Id),
+		Name:        aws.ToString(resp.Name),
+		ListenerArn: aws.ToString(resp.Arn),
+		Id:          aws.ToString(resp.Id),
 		ServiceId:   latticeSvcId,
 	}, nil
 }
 
 func (d *defaultListenerManager) update(ctx context.Context, latticeSvcId string, listener *vpclattice.ListenerSummary, defaultAction *vpclattice.RuleAction) error {
 
-	d.log.Debugf(ctx, "Updating listener %s default action", aws.StringValue(listener.Id))
+	d.log.Debugf(ctx, "Updating listener %s default action", aws.ToString(listener.Id))
 	_, err := d.cloud.Lattice().UpdateListenerWithContext(ctx, &vpclattice.UpdateListenerInput{
 		DefaultAction:      defaultAction,
 		ListenerIdentifier: listener.Id,
 		ServiceIdentifier:  aws.String(latticeSvcId),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to update lattice listener %s due to %s", aws.StringValue(listener.Id), err)
+		return fmt.Errorf("failed to update lattice listener %s due to %s", aws.ToString(listener.Id), err)
 	}
-	d.log.Infof(ctx, "Success update listener %s default action", aws.StringValue(listener.Id))
+	d.log.Infof(ctx, "Success update listener %s default action", aws.ToString(listener.Id))
 	return nil
 }
 

@@ -3,11 +3,11 @@ package integration
 import (
 	model "github.com/aws/aws-application-networking-k8s/pkg/model/lattice"
 	"github.com/aws/aws-application-networking-k8s/pkg/utils/gwlog"
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"time"
 
 	"github.com/aws/aws-application-networking-k8s/test/pkg/test"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
@@ -79,8 +79,8 @@ var _ = Describe("HTTPRoute Update", func() {
 				g.Expect(*tg2.Status).To(Equal(vpclattice.TargetGroupStatusActive))
 			}).WithPolling(15 * time.Second).WithTimeout(2 * time.Minute).Should(Succeed())
 
-			gwlog.FallbackLogger.Infof(ctx, "Found TG1 %s and TG2 %s", aws.StringValue(tg1.Id), aws.StringValue(tg2.Id))
-			Expect(aws.StringValue(tg1.Id) != aws.StringValue(tg2.Id)).To(BeTrue())
+			gwlog.FallbackLogger.Infof(ctx, "Found TG1 %s and TG2 %s", aws.ToString(tg1.Id), aws.ToString(tg2.Id))
+			Expect(aws.ToString(tg1.Id) != aws.ToString(tg2.Id)).To(BeTrue())
 
 			// deletion of one should not affect the other
 			testFramework.ExpectDeleted(ctx, route1)

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 
 	pkg_aws "github.com/aws/aws-application-networking-k8s/pkg/aws"
 	"github.com/aws/aws-application-networking-k8s/pkg/utils/gwlog"
@@ -170,7 +170,7 @@ func (r *defaultRuleManager) Upsert(
 	}
 
 	r.log.Debugf(ctx, "Upsert rule %s for service %s-%s and listener port %d and protocol %s",
-		aws.StringValue(latticeRuleFromModel.Name), latticeServiceId, latticeListenerId,
+		aws.ToString(latticeRuleFromModel.Name), latticeServiceId, latticeListenerId,
 		modelListener.Spec.Port, modelListener.Spec.Protocol)
 
 	lri := vpclattice.ListRulesInput{
@@ -206,9 +206,9 @@ func (r *defaultRuleManager) updateIfNeeded(
 	latticeListenerId string,
 ) (model.RuleStatus, error) {
 	updatedRuleStatus := model.RuleStatus{
-		Name:       aws.StringValue(matchingRule.Name),
-		Arn:        aws.StringValue(matchingRule.Arn),
-		Id:         aws.StringValue(matchingRule.Id),
+		Name:       aws.ToString(matchingRule.Name),
+		Arn:        aws.ToString(matchingRule.Arn),
+		Id:         aws.ToString(matchingRule.Id),
 		ListenerId: latticeListenerId,
 		ServiceId:  latticeSvcId,
 		Priority:   aws.Int64Value(matchingRule.Priority),
@@ -276,12 +276,12 @@ func (r *defaultRuleManager) create(
 		return model.RuleStatus{}, fmt.Errorf("failed CreateRule %s, %s due to %s", latticeListenerId, latticeSvcId, err)
 	}
 
-	r.log.Infof(ctx, "Success CreateRule %s, %s", aws.StringValue(res.Name), aws.StringValue(res.Id))
+	r.log.Infof(ctx, "Success CreateRule %s, %s", aws.ToString(res.Name), aws.ToString(res.Id))
 
 	return model.RuleStatus{
-		Name:       aws.StringValue(res.Name),
-		Arn:        aws.StringValue(res.Arn),
-		Id:         aws.StringValue(res.Id),
+		Name:       aws.ToString(res.Name),
+		Arn:        aws.ToString(res.Arn),
+		Id:         aws.ToString(res.Id),
 		ServiceId:  latticeSvcId,
 		ListenerId: latticeListenerId,
 		Priority:   aws.Int64Value(res.Priority),

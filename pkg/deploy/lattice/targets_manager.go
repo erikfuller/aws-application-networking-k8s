@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 
 	pkg_aws "github.com/aws/aws-application-networking-k8s/pkg/aws"
 	model "github.com/aws/aws-application-networking-k8s/pkg/model/lattice"
 	"github.com/aws/aws-application-networking-k8s/pkg/utils"
 	"github.com/aws/aws-application-networking-k8s/pkg/utils/gwlog"
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 )
 
 const (
@@ -89,10 +89,10 @@ func (s *defaultTargetsManager) findStaleTargets(
 	staleTargets := make([]model.Target, 0)
 	for _, target := range listTargetsOutput {
 		ipPort := model.Target{
-			TargetIP: aws.StringValue(target.Id),
+			TargetIP: aws.ToString(target.Id),
 			Port:     aws.Int64Value(target.Port),
 		}
-		if aws.StringValue(target.Status) != vpclattice.TargetStatusDraining && !modelSet.Contains(ipPort) {
+		if aws.ToString(target.Status) != vpclattice.TargetStatusDraining && !modelSet.Contains(ipPort) {
 			staleTargets = append(staleTargets, ipPort)
 		}
 	}

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 
 	"github.com/aws/aws-application-networking-k8s/pkg/aws/services"
 	"github.com/aws/aws-application-networking-k8s/pkg/model/core"
@@ -107,7 +107,7 @@ func (s *defaultTargetGroupManager) create(ctx context.Context, modelTg *model.T
 	}
 	s.log.Infof(ctx, "Success CreateTargetGroup %s", latticeTgName)
 
-	latticeTgStatus := aws.StringValue(resp.Status)
+	latticeTgStatus := aws.ToString(resp.Status)
 	if latticeTgStatus != vpclattice.TargetGroupStatusActive &&
 		latticeTgStatus != vpclattice.TargetGroupStatusCreateInProgress {
 
@@ -118,9 +118,9 @@ func (s *defaultTargetGroupManager) create(ctx context.Context, modelTg *model.T
 	// create-in-progress is considered success
 	// later, target reg may need to retry due to the state, and that's OK
 	return model.TargetGroupStatus{
-		Name: aws.StringValue(resp.Name),
-		Arn:  aws.StringValue(resp.Arn),
-		Id:   aws.StringValue(resp.Id)}, nil
+		Name: aws.ToString(resp.Name),
+		Arn:  aws.ToString(resp.Arn),
+		Id:   aws.ToString(resp.Id)}, nil
 }
 
 func (s *defaultTargetGroupManager) update(ctx context.Context, targetGroup *model.TargetGroup, latticeTg *vpclattice.GetTargetGroupOutput) (model.TargetGroupStatus, error) {
@@ -139,14 +139,14 @@ func (s *defaultTargetGroupManager) update(ctx context.Context, targetGroup *mod
 		})
 		if err != nil {
 			return model.TargetGroupStatus{},
-				fmt.Errorf("failed UpdateTargetGroup %s due to %w", aws.StringValue(latticeTg.Id), err)
+				fmt.Errorf("failed UpdateTargetGroup %s due to %w", aws.ToString(latticeTg.Id), err)
 		}
 	}
 
 	modelTgStatus := model.TargetGroupStatus{
-		Name: aws.StringValue(latticeTg.Name),
-		Arn:  aws.StringValue(latticeTg.Arn),
-		Id:   aws.StringValue(latticeTg.Id),
+		Name: aws.ToString(latticeTg.Name),
+		Arn:  aws.ToString(latticeTg.Arn),
+		Id:   aws.ToString(latticeTg.Id),
 	}
 
 	return modelTgStatus, nil
@@ -166,9 +166,9 @@ func (s *defaultTargetGroupManager) Delete(ctx context.Context, modelTg *model.T
 		}
 
 		modelTg.Status = &model.TargetGroupStatus{
-			Name: aws.StringValue(latticeTgSummary.Name),
-			Arn:  aws.StringValue(latticeTgSummary.Arn),
-			Id:   aws.StringValue(latticeTgSummary.Id),
+			Name: aws.ToString(latticeTgSummary.Name),
+			Arn:  aws.ToString(latticeTgSummary.Arn),
+			Id:   aws.ToString(latticeTgSummary.Id),
 		}
 	}
 	s.log.Debugf(ctx, "Deleting target group %s", modelTg.Status.Id)
@@ -197,7 +197,7 @@ func (s *defaultTargetGroupManager) Delete(ctx context.Context, modelTg *model.T
 			Port: t.Port,
 		})
 
-		if aws.StringValue(t.Status) == vpclattice.TargetStatusDraining {
+		if aws.ToString(t.Status) == vpclattice.TargetStatusDraining {
 			drainCount++
 		}
 	}
@@ -265,7 +265,7 @@ func (s *defaultTargetGroupManager) List(ctx context.Context) ([]tgListOutput, e
 		return nil, nil
 	}
 	tgArns := utils.SliceMap(resp, func(tg *vpclattice.TargetGroupSummary) string {
-		return aws.StringValue(tg.Arn)
+		return aws.ToString(tg.Arn)
 	})
 	tgArnToTagsMap, err := s.cloud.Tagging().GetTagsForArns(ctx, tgArns)
 
@@ -306,7 +306,7 @@ func (s *defaultTargetGroupManager) findTargetGroup(
 		}
 
 		// we ignore create failed status, so may as well check for it first
-		status := aws.StringValue(latticeTg.Status)
+		status := aws.ToString(latticeTg.Status)
 		if status == vpclattice.TargetGroupStatusCreateFailed {
 			continue
 		}
@@ -342,10 +342,10 @@ func (s *defaultTargetGroupManager) IsTargetGroupMatch(ctx context.Context,
 	latticeTagsAsModelTags *model.TargetGroupTagFields) (bool, error) {
 
 	if aws.Int64Value(latticeTg.Port) != int64(modelTg.Spec.Port) ||
-		aws.StringValue(latticeTg.Protocol) != modelTg.Spec.Protocol ||
-		aws.StringValue(latticeTg.IpAddressType) != modelTg.Spec.IpAddressType ||
-		aws.StringValue(latticeTg.Type) != string(modelTg.Spec.Type) ||
-		aws.StringValue(latticeTg.VpcIdentifier) != modelTg.Spec.VpcId {
+		aws.ToString(latticeTg.Protocol) != modelTg.Spec.Protocol ||
+		aws.ToString(latticeTg.IpAddressType) != modelTg.Spec.IpAddressType ||
+		aws.ToString(latticeTg.Type) != string(modelTg.Spec.Type) ||
+		aws.ToString(latticeTg.VpcIdentifier) != modelTg.Spec.VpcId {
 
 		return false, nil
 	}
@@ -447,7 +447,7 @@ func (s *defaultTargetGroupManager) findSvcExportTG(ctx context.Context, svcImpo
 		svcMatch := tgTags.IsSourceTypeServiceExport() && (tgTags.K8SServiceName == svcImportTg.K8SServiceName) &&
 			(tgTags.K8SServiceNamespace == svcImportTg.K8SServiceNamespace)
 		clusterMatch := (svcImportTg.K8SClusterName == "") || (tgTags.K8SClusterName == svcImportTg.K8SClusterName)
-		vpcMatch := (svcImportTg.VpcId == "") || (svcImportTg.VpcId == aws.StringValue(tg.tgSummary.VpcIdentifier))
+		vpcMatch := (svcImportTg.VpcId == "") || (svcImportTg.VpcId == aws.ToString(tg.tgSummary.VpcIdentifier))
 		if svcMatch && clusterMatch && vpcMatch {
 			return *tg.tgSummary.Id, nil
 		}

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/service/vpclattice"
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 )
@@ -419,7 +419,7 @@ func Test_latticeTagging_FindResourcesByTags(t *testing.T) {
 
 			mockLattice.EXPECT().ListTagsForResourceWithContext(tt.ctx, gomock.Any()).DoAndReturn(
 				func(ctx aws.Context, input *vpclattice.ListTagsForResourceInput, opts ...request.Option) (*vpclattice.ListTagsForResourceOutput, error) {
-					return &vpclattice.ListTagsForResourceOutput{Tags: tt.tgTags[aws.StringValue(input.ResourceArn)]}, nil
+					return &vpclattice.ListTagsForResourceOutput{Tags: tt.tgTags[aws.ToString(input.ResourceArn)]}, nil
 				}).Times(len(tt.targetGroups))
 
 			got, err := lt.FindResourcesByTags(tt.ctx, ResourceTypeTargetGroup, tt.inputTags)

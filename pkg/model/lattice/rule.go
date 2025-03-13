@@ -3,7 +3,7 @@ package lattice
 import (
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/vpclattice"
+	"github.com/aws/aws-sdk-go-v2/service/vpclattice"
 
 	"github.com/aws/aws-application-networking-k8s/pkg/model/core"
 )
